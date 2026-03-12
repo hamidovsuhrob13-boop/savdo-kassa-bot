@@ -1,6 +1,5 @@
 import os
 import sqlite3
-import threading
 
 from flask import Flask, jsonify, render_template
 from telegram import KeyboardButton, ReplyKeyboardMarkup, Update, WebAppInfo
@@ -13,27 +12,6 @@ DB_PATH = "savdo.db"
 app = Flask(__name__)
 
 
-def parse_allowed_ids() -> set[int]:
-    raw = os.getenv("ALLOWED_IDS", "").strip()
-    if not raw:
-        return set()
-    result = set()
-    for part in raw.split(","):
-        part = part.strip()
-        if part.isdigit():
-            result.add(int(part))
-    return result
-
-
-ALLOWED_IDS = parse_allowed_ids()
-
-
-def is_allowed(user_id: int) -> bool:
-    # Если список пустой, пускаем всех.
-    # Потом закроем доступ только для тебя и жены.
-    return not ALLOWED_IDS or user_id in ALLOWED_IDS
-
-
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -43,16 +21,6 @@ def get_db():
 def init_db():
     conn = get_db()
     cur = conn.cursor()
-
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        telegram_id INTEGER UNIQUE,
-        full_name TEXT,
-        role TEXT DEFAULT 'seller',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-    """)
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS products (
@@ -87,18 +55,7 @@ def init_db():
         total REAL DEFAULT 0,
         paid_now REAL DEFAULT 0,
         debt REAL DEFAULT 0,
-        seller_telegram_id INTEGER,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-    """)
-
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS debts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        client_id INTEGER,
-        sale_id INTEGER,
-        amount REAL DEFAULT 0,
-        status TEXT DEFAULT 'open',
+        seller_name TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     """)
@@ -129,14 +86,8 @@ def dashboard():
     cur.execute("SELECT COALESCE(SUM(total), 0) FROM sales")
     total_sales = cur.fetchone()[0]
 
-    cur.execute("SELECT COALESCE(SUM(paid_now), 0) FROM sales")
-    total_paid = cur.fetchone()[0]
-
     cur.execute("SELECT COALESCE(SUM(debt), 0) FROM sales")
     total_debt = cur.fetchone()[0]
-
-    cur.execute("SELECT COUNT(*) FROM clients")
-    clients_count = cur.fetchone()[0]
 
     conn.close()
 
@@ -145,19 +96,11 @@ def dashboard():
         "total_items": total_items,
         "stock_value": stock_value,
         "total_sales": total_sales,
-        "total_paid": total_paid,
-        "total_debt": total_debt,
-        "clients_count": clients_count
+        "total_debt": total_debt
     })
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-
-    if not is_allowed(user.id):
-        await update.message.reply_text("Доступ закрыт.")
-        return
-
     text = (
         "Салом! Система запущена.\n\n"
         "Команды:\n"
@@ -178,21 +121,31 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text + "\n\nMini App URL пока не задан."
         )
 
+
 async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     await update.message.reply_text(
         f"Твой Telegram ID: {user.id}\nИмя: {user.full_name}"
     )
 
-def run_bot():
+
+@app.route("/health")
+def health():
+    return {"ok": True}
+
+
+def main():
     if not BOT_TOKEN:
         raise ValueError("BOT_TOKEN not found")
+
+    init_db()
 
     application = ApplicationBuilder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("id", get_id))
 
-    application.run_polling(
-        drop_pending_updates=True,
-        stop_signals=None
-    )
+    application.run_polling(drop_pending_updates=True)
+
+
+if __name__ == "__main__":
+    main()
