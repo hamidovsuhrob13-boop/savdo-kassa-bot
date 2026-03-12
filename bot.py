@@ -185,7 +185,6 @@ async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Твой Telegram ID: {user.id}\nИмя: {user.full_name}"
     )
 
-
 def run_bot():
     if not BOT_TOKEN:
         raise ValueError("BOT_TOKEN not found")
@@ -193,14 +192,8 @@ def run_bot():
     application = ApplicationBuilder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("id", get_id))
-    application.run_polling(drop_pending_updates=True)
 
-
-if __name__ == "__main__":
-    init_db()
-
-    bot_thread = threading.Thread(target=run_bot, daemon=True)
-    bot_thread.start()
-
-    port = int(os.getenv("PORT", "8000"))
-    app.run(host="0.0.0.0", port=port)
+    application.run_polling(
+        drop_pending_updates=True,
+        stop_signals=None
+    )
