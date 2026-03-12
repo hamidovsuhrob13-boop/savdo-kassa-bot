@@ -1,6 +1,6 @@
 from flask import Flask, render_template, jsonify
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder="templates")
 
 
 @app.route("/")
@@ -10,7 +10,7 @@ def index():
 
 @app.route("/health")
 def health():
-    return {"ok": True}
+    return jsonify({"ok": True})
 
 
 @app.route("/api/dashboard")
@@ -22,7 +22,3 @@ def dashboard():
         "total_sales": 0,
         "total_debt": 0
     })
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000)
