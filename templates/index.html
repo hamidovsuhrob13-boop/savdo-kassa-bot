@@ -12,39 +12,54 @@
       background: #0f172a;
       color: white;
     }
+
     .wrap {
-      padding: 20px;
+      padding: 16px;
+      max-width: 900px;
+      margin: 0 auto;
     }
+
     h1 {
       margin-top: 0;
       font-size: 28px;
     }
+
+    .subtitle {
+      opacity: 0.8;
+      margin-bottom: 18px;
+    }
+
     .grid {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
       gap: 12px;
-      margin-top: 20px;
+      margin-bottom: 18px;
     }
+
     .card {
       background: #1e293b;
       border-radius: 14px;
       padding: 16px;
       box-shadow: 0 4px 14px rgba(0,0,0,0.25);
     }
+
     .title {
       font-size: 14px;
       opacity: 0.8;
       margin-bottom: 8px;
     }
+
     .value {
       font-size: 22px;
       font-weight: bold;
     }
+
     .menu {
-      margin-top: 24px;
       display: grid;
       gap: 10px;
+      margin-bottom: 20px;
     }
+
     .btn {
       background: #2563eb;
       border: none;
@@ -53,16 +68,81 @@
       border-radius: 12px;
       font-size: 16px;
       cursor: pointer;
+      width: 100%;
     }
+
     .btn.gray {
       background: #334155;
+    }
+
+    .section {
+      background: #1e293b;
+      border-radius: 16px;
+      padding: 16px;
+      margin-top: 18px;
+    }
+
+    .section h2 {
+      margin-top: 0;
+      font-size: 22px;
+    }
+
+    .row {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid #475569;
+      background: #0f172a;
+      color: white;
+      font-size: 15px;
+    }
+
+    .product-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .product-item {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 14px;
+    }
+
+    .product-name {
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+
+    .product-meta {
+      font-size: 14px;
+      opacity: 0.9;
+      line-height: 1.6;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .empty {
+      opacity: 0.7;
+      padding: 10px 0;
     }
   </style>
 </head>
 <body>
   <div class="wrap">
     <h1>Family Kassa</h1>
-    <p>Система управления семейным бизнесом</p>
+    <div class="subtitle">Система управления семейным бизнесом</div>
 
     <div class="grid">
       <div class="card">
@@ -84,12 +164,27 @@
     </div>
 
     <div class="menu">
-      <button class="btn">Товары</button>
-      <button class="btn">Продажа</button>
+      <button class="btn" onclick="showSection('products-section')">Товары</button>
+      <button class="btn gray">Продажа</button>
       <button class="btn gray">Клиенты</button>
       <button class="btn gray">Долги</button>
       <button class="btn gray">Статистика</button>
       <button class="btn gray">Расходы</button>
+    </div>
+
+    <div id="products-section" class="section">
+      <h2>Товары</h2>
+
+      <div class="row">
+        <input type="text" id="product_name" placeholder="Название товара">
+        <input type="number" id="product_qty" placeholder="Количество">
+        <input type="number" id="product_buy_price" placeholder="Закупочная цена">
+        <input type="number" id="product_sell_price" placeholder="Цена продажи">
+      </div>
+
+      <button class="btn" onclick="addProduct()">Сохранить товар</button>
+
+      <div class="product-list" id="product_list"></div>
     </div>
   </div>
 
@@ -98,15 +193,121 @@
       Telegram.WebApp.expand();
     }
 
-    fetch('/api/dashboard')
-      .then(r => r.json())
-      .then(data => {
-        document.getElementById('products_count').textContent = data.products_count;
-        document.getElementById('total_items').textContent = data.total_items;
-        document.getElementById('stock_value').textContent = data.stock_value;
-        document.getElementById('total_debt').textContent = data.total_debt;
-      })
-      .catch(err => console.error(err));
+    const STORAGE_KEY = "family_kassa_products";
+
+    function getProducts() {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    }
+
+    function saveProducts(products) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
+    }
+
+    function showSection(sectionId) {
+      document.getElementById(sectionId).scrollIntoView({ behavior: "smooth" });
+    }
+
+    function formatMoney(value) {
+      return Number(value || 0).toLocaleString("ru-RU");
+    }
+
+    function updateDashboard() {
+      const products = getProducts();
+
+      const productsCount = products.length;
+      const totalItems = products.reduce((sum, p) => sum + Number(p.qty || 0), 0);
+      const stockValue = products.reduce(
+        (sum, p) => sum + (Number(p.qty || 0) * Number(p.buyPrice || 0)),
+        0
+      );
+
+      document.getElementById("products_count").textContent = productsCount;
+      document.getElementById("total_items").textContent = totalItems;
+      document.getElementById("stock_value").textContent = formatMoney(stockValue);
+      document.getElementById("total_debt").textContent = "0";
+    }
+
+    function renderProducts() {
+      const list = document.getElementById("product_list");
+      const products = getProducts();
+
+      if (products.length === 0) {
+        list.innerHTML = `<div class="empty">Товаров пока нет</div>`;
+        return;
+      }
+
+      list.innerHTML = products.map((product, index) => `
+        <div class="product-item">
+          <div class="product-name">${product.name}</div>
+          <div class="product-meta">
+            Количество: ${product.qty}<br>
+            Закупка: ${formatMoney(product.buyPrice)}<br>
+            Продажа: ${formatMoney(product.sellPrice)}
+          </div>
+          <div style="margin-top:10px;">
+            <button class="btn gray" onclick="deleteProduct(${index})">Удалить</button>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function clearForm() {
+      document.getElementById("product_name").value = "";
+      document.getElementById("product_qty").value = "";
+      document.getElementById("product_buy_price").value = "";
+      document.getElementById("product_sell_price").value = "";
+    }
+
+    function addProduct() {
+      const name = document.getElementById("product_name").value.trim();
+      const qty = Number(document.getElementById("product_qty").value);
+      const buyPrice = Number(document.getElementById("product_buy_price").value);
+      const sellPrice = Number(document.getElementById("product_sell_price").value);
+
+      if (!name) {
+        alert("Введите название товара");
+        return;
+      }
+
+      if (!qty || qty < 0) {
+        alert("Введите количество");
+        return;
+      }
+
+      if (!buyPrice || buyPrice < 0) {
+        alert("Введите закупочную цену");
+        return;
+      }
+
+      if (!sellPrice || sellPrice < 0) {
+        alert("Введите цену продажи");
+        return;
+      }
+
+      const products = getProducts();
+      products.push({
+        name,
+        qty,
+        buyPrice,
+        sellPrice
+      });
+
+      saveProducts(products);
+      clearForm();
+      renderProducts();
+      updateDashboard();
+    }
+
+    function deleteProduct(index) {
+      const products = getProducts();
+      products.splice(index, 1);
+      saveProducts(products);
+      renderProducts();
+      updateDashboard();
+    }
+
+    renderProducts();
+    updateDashboard();
   </script>
 </body>
 </html>
