@@ -178,7 +178,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text + "\n\nMini App URL пока не задан."
         )
 
-
 async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     await update.message.reply_text(
