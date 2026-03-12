@@ -308,6 +308,293 @@
 
     renderProducts();
     updateDashboard();
-  </script>
+<script>
+  if (window.Telegram && Telegram.WebApp) {
+    Telegram.WebApp.expand();
+  }
+
+  const PRODUCTS_KEY = "family_kassa_products";
+  const SALES_KEY = "family_kassa_sales";
+  const DEBTS_KEY = "family_kassa_debts";
+
+  function getProducts() {
+    return JSON.parse(localStorage.getItem(PRODUCTS_KEY) || "[]");
+  }
+
+  function saveProducts(products) {
+    localStorage.setItem(PRODUCTS_KEY, JSON.stringify(products));
+  }
+
+  function getSales() {
+    return JSON.parse(localStorage.getItem(SALES_KEY) || "[]");
+  }
+
+  function saveSales(sales) {
+    localStorage.setItem(SALES_KEY, JSON.stringify(sales));
+  }
+
+  function getDebts() {
+    return JSON.parse(localStorage.getItem(DEBTS_KEY) || "[]");
+  }
+
+  function saveDebts(debts) {
+    localStorage.setItem(DEBTS_KEY, JSON.stringify(debts));
+  }
+
+  function showSection(sectionId) {
+    document.getElementById(sectionId).scrollIntoView({ behavior: "smooth" });
+  }
+
+  function formatMoney(value) {
+    return Number(value || 0).toLocaleString("ru-RU");
+  }
+
+  function updateDashboard() {
+    const products = getProducts();
+    const debts = getDebts();
+
+    const productsCount = products.length;
+    const totalItems = products.reduce((sum, p) => sum + Number(p.qty || 0), 0);
+    const stockValue = products.reduce(
+      (sum, p) => sum + (Number(p.qty || 0) * Number(p.buyPrice || 0)),
+      0
+    );
+    const totalDebt = debts.reduce((sum, d) => sum + Number(d.amount || 0), 0);
+
+    document.getElementById("products_count").textContent = productsCount;
+    document.getElementById("total_items").textContent = totalItems;
+    document.getElementById("stock_value").textContent = formatMoney(stockValue);
+    document.getElementById("total_debt").textContent = formatMoney(totalDebt);
+  }
+
+  function renderProducts() {
+    const list = document.getElementById("product_list");
+    const products = getProducts();
+
+    if (!list) return;
+
+    if (products.length === 0) {
+      list.innerHTML = `<div class="empty">Товаров пока нет</div>`;
+      fillSaleProducts();
+      return;
+    }
+
+    list.innerHTML = products.map((product, index) => `
+      <div class="product-item">
+        <div class="product-name">${product.name}</div>
+        <div class="product-meta">
+          Количество: ${product.qty}<br>
+          Закупка: ${formatMoney(product.buyPrice)}<br>
+          Продажа: ${formatMoney(product.sellPrice)}
+        </div>
+        <div style="margin-top:10px;">
+          <button class="btn gray" onclick="deleteProduct(${index})">Удалить</button>
+        </div>
+      </div>
+    `).join("");
+
+    fillSaleProducts();
+  }
+
+  function fillSaleProducts() {
+    const select = document.getElementById("sale_product");
+    if (!select) return;
+
+    const products = getProducts();
+
+    if (products.length === 0) {
+      select.innerHTML = `<option value="">Нет товаров</option>`;
+      return;
+    }
+
+    select.innerHTML = `<option value="">Выберите товар</option>` +
+      products.map((p, i) => `
+        <option value="${i}">
+          ${p.name} | остаток: ${p.qty} | цена: ${p.sellPrice}
+        </option>
+      `).join("");
+  }
+
+  function clearForm() {
+    document.getElementById("product_name").value = "";
+    document.getElementById("product_qty").value = "";
+    document.getElementById("product_buy_price").value = "";
+    document.getElementById("product_sell_price").value = "";
+  }
+
+  function addProduct() {
+    const name = document.getElementById("product_name").value.trim();
+    const qty = Number(document.getElementById("product_qty").value);
+    const buyPrice = Number(document.getElementById("product_buy_price").value);
+    const sellPrice = Number(document.getElementById("product_sell_price").value);
+
+    if (!name) {
+      alert("Введите название товара");
+      return;
+    }
+
+    if (!qty || qty < 0) {
+      alert("Введите количество");
+      return;
+    }
+
+    if (!buyPrice || buyPrice < 0) {
+      alert("Введите закупочную цену");
+      return;
+    }
+
+    if (!sellPrice || sellPrice < 0) {
+      alert("Введите цену продажи");
+      return;
+    }
+
+    const products = getProducts();
+    products.push({
+      name,
+      qty,
+      buyPrice,
+      sellPrice
+    });
+
+    saveProducts(products);
+    clearForm();
+    renderProducts();
+    updateDashboard();
+  }
+
+  function deleteProduct(index) {
+    const products = getProducts();
+    products.splice(index, 1);
+    saveProducts(products);
+    renderProducts();
+    updateDashboard();
+  }
+
+  function addSale() {
+    const productIndex = document.getElementById("sale_product").value;
+    const qty = Number(document.getElementById("sale_qty").value);
+    const clientName = document.getElementById("sale_client").value.trim();
+    const paid = Number(document.getElementById("sale_paid").value || 0);
+
+    const products = getProducts();
+
+    if (productIndex === "") {
+      alert("Выберите товар");
+      return;
+    }
+
+    const product = products[productIndex];
+
+    if (!qty || qty <= 0) {
+      alert("Введите количество продажи");
+      return;
+    }
+
+    if (qty > Number(product.qty)) {
+      alert("На складе недостаточно товара");
+      return;
+    }
+
+    if (!clientName) {
+      alert("Введите имя клиента");
+      return;
+    }
+
+    const total = qty * Number(product.sellPrice);
+    const debt = total - paid;
+
+    product.qty = Number(product.qty) - qty;
+    saveProducts(products);
+
+    const sales = getSales();
+    sales.push({
+      productName: product.name,
+      qty,
+      clientName,
+      paid,
+      total,
+      debt: debt > 0 ? debt : 0,
+      date: new Date().toLocaleString("ru-RU")
+    });
+    saveSales(sales);
+
+    if (debt > 0) {
+      const debts = getDebts();
+      debts.push({
+        clientName,
+        productName: product.name,
+        amount: debt,
+        date: new Date().toLocaleString("ru-RU")
+      });
+      saveDebts(debts);
+    }
+
+    document.getElementById("sale_product").value = "";
+    document.getElementById("sale_qty").value = "";
+    document.getElementById("sale_client").value = "";
+    document.getElementById("sale_paid").value = "";
+
+    renderProducts();
+    renderSales();
+    renderDebts();
+    updateDashboard();
+
+    alert(`Продажа сохранена. Сумма: ${total}. Долг: ${debt > 0 ? debt : 0}`);
+  }
+
+  function renderSales() {
+    const list = document.getElementById("sales_list");
+    if (!list) return;
+
+    const sales = getSales();
+
+    if (sales.length === 0) {
+      list.innerHTML = `<div class="empty">Продаж пока нет</div>`;
+      return;
+    }
+
+    list.innerHTML = sales.slice().reverse().map((sale) => `
+      <div class="product-item">
+        <div class="product-name">${sale.productName}</div>
+        <div class="product-meta">
+          Клиент: ${sale.clientName}<br>
+          Количество: ${sale.qty}<br>
+          Сумма: ${formatMoney(sale.total)}<br>
+          Оплачено: ${formatMoney(sale.paid)}<br>
+          Долг: ${formatMoney(sale.debt)}<br>
+          Дата: ${sale.date}
+        </div>
+      </div>
+    `).join("");
+  }
+
+  function renderDebts() {
+    const list = document.getElementById("debts_list");
+    if (!list) return;
+
+    const debts = getDebts();
+
+    if (debts.length === 0) {
+      list.innerHTML = `<div class="empty">Долгов пока нет</div>`;
+      return;
+    }
+
+    list.innerHTML = debts.slice().reverse().map((debt) => `
+      <div class="product-item">
+        <div class="product-name">${debt.clientName}</div>
+        <div class="product-meta">
+          Товар: ${debt.productName}<br>
+          Долг: ${formatMoney(debt.amount)}<br>
+          Дата: ${debt.date}
+        </div>
+      </div>
+    `).join("");
+  }
+
+  renderProducts();
+  renderSales();
+  renderDebts();
+  updateDashboard();
+</script>
 </body>
 </html>
