@@ -1,19 +1,206 @@
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import os
+import sqlite3
+import threading
+
+from flask import Flask, jsonify, render_template
+from telegram import KeyboardButton, ReplyKeyboardMarkup, Update, WebAppInfo
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+MINI_APP_URL = os.getenv("MINI_APP_URL", "").strip()
+DB_PATH = "savdo.db"
+
+app = Flask(__name__)
+
+
+def parse_allowed_ids() -> set[int]:
+    raw = os.getenv("ALLOWED_IDS", "").strip()
+    if not raw:
+        return set()
+    result = set()
+    for part in raw.split(","):
+        part = part.strip()
+        if part.isdigit():
+            result.add(int(part))
+    return result
+
+
+ALLOWED_IDS = parse_allowed_ids()
+
+
+def is_allowed(user_id: int) -> bool:
+    # Если список пустой, пускаем всех.
+    # Потом закроем доступ только для тебя и жены.
+    return not ALLOWED_IDS or user_id in ALLOWED_IDS
+
+
+def get_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db():
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        telegram_id INTEGER UNIQUE,
+        full_name TEXT,
+        role TEXT DEFAULT 'seller',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS products (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        buy_price REAL DEFAULT 0,
+        sell_price REAL DEFAULT 0,
+        quantity INTEGER DEFAULT 0,
+        note TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS clients (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        full_name TEXT NOT NULL,
+        phone TEXT,
+        note TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS sales (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id INTEGER,
+        client_id INTEGER,
+        qty INTEGER DEFAULT 1,
+        sell_price REAL DEFAULT 0,
+        total REAL DEFAULT 0,
+        paid_now REAL DEFAULT 0,
+        debt REAL DEFAULT 0,
+        seller_telegram_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS debts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_id INTEGER,
+        sale_id INTEGER,
+        amount REAL DEFAULT 0,
+        status TEXT DEFAULT 'open',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    conn.commit()
+    conn.close()
+
+
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+
+@app.route("/api/dashboard")
+def dashboard():
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("SELECT COUNT(*) FROM products")
+    products_count = cur.fetchone()[0]
+
+    cur.execute("SELECT COALESCE(SUM(quantity), 0) FROM products")
+    total_items = cur.fetchone()[0]
+
+    cur.execute("SELECT COALESCE(SUM(quantity * buy_price), 0) FROM products")
+    stock_value = cur.fetchone()[0]
+
+    cur.execute("SELECT COALESCE(SUM(total), 0) FROM sales")
+    total_sales = cur.fetchone()[0]
+
+    cur.execute("SELECT COALESCE(SUM(paid_now), 0) FROM sales")
+    total_paid = cur.fetchone()[0]
+
+    cur.execute("SELECT COALESCE(SUM(debt), 0) FROM sales")
+    total_debt = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM clients")
+    clients_count = cur.fetchone()[0]
+
+    conn.close()
+
+    return jsonify({
+        "products_count": products_count,
+        "total_items": total_items,
+        "stock_value": stock_value,
+        "total_sales": total_sales,
+        "total_paid": total_paid,
+        "total_debt": total_debt,
+        "clients_count": clients_count
+    })
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Салом! Бот кор мекунад.")
+    user = update.effective_user
 
-def main():
+    if not is_allowed(user.id):
+        await update.message.reply_text("Доступ закрыт.")
+        return
+
+    text = (
+        "Салом! Система запущена.\n\n"
+        "Команды:\n"
+        "/start — открыть меню\n"
+        "/id — узнать свой Telegram ID"
+    )
+
+    if MINI_APP_URL:
+        keyboard = [
+            [KeyboardButton("Открыть систему", web_app=WebAppInfo(url=MINI_APP_URL))]
+        ]
+        await update.message.reply_text(
+            text,
+            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        )
+    else:
+        await update.message.reply_text(
+            text + "\n\nMini App URL пока не задан."
+        )
+
+
+async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    await update.message.reply_text(
+        f"Твой Telegram ID: {user.id}\nИмя: {user.full_name}"
+    )
+
+
+def run_bot():
     if not BOT_TOKEN:
         raise ValueError("BOT_TOKEN not found")
 
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.run_polling()
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("id", get_id))
+    application.run_polling(drop_pending_updates=True)
+
 
 if __name__ == "__main__":
-    main()
+    init_db()
+
+    bot_thread = threading.Thread(target=run_bot, daemon=True)
+    bot_thread.start()
+
+    port = int(os.getenv("PORT", "8000"))
+    app.run(host="0.0.0.0", port=port)
