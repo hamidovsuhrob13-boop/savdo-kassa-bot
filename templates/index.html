@@ -127,7 +127,7 @@
     .product-meta {
       font-size: 14px;
       opacity: 0.95;
-      line-height: 1.6;
+      line-height: 1.7;
     }
 
     .empty {
@@ -207,7 +207,14 @@
         </select>
 
         <input type="number" id="sale_qty" placeholder="Количество продажи" oninput="updateSalePreview()">
-        <input type="text" id="sale_client" placeholder="Имя клиента">
+
+        <select id="sale_client_select" onchange="fillSelectedClient(); updateSalePreview();">
+          <option value="">Выберите клиента</option>
+        </select>
+
+        <input type="text" id="sale_client_name" placeholder="Имя клиента" readonly>
+        <input type="text" id="sale_client_phone" placeholder="Телефон клиента" readonly>
+
         <input type="number" id="sale_paid" placeholder="Сколько оплатил клиент" oninput="updateSalePreview()">
       </div>
 
@@ -217,6 +224,8 @@
           Цена товара: <span id="preview_price">0</span><br>
           Остаток на складе: <span id="preview_stock">0</span><br>
           Количество: <span id="preview_qty">0</span><br>
+          Клиент: <span id="preview_client">—</span><br>
+          Телефон: <span id="preview_phone">—</span><br>
           Общая сумма: <span id="preview_total">0</span><br>
           Оплачено: <span id="preview_paid">0</span><br>
           Остаток долга: <span id="preview_debt">0</span>
@@ -231,6 +240,14 @@
 
     <div id="clients-section" class="section">
       <h2>Клиенты</h2>
+
+      <div class="row">
+        <input type="text" id="client_name" placeholder="Имя клиента">
+        <input type="text" id="client_phone" placeholder="Телефон клиента">
+      </div>
+
+      <button class="btn" onclick="addClient()">Сохранить клиента</button>
+
       <div class="product-list" id="clients_list"></div>
     </div>
 
@@ -258,6 +275,7 @@
     const PRODUCTS_KEY = "family_kassa_products";
     const SALES_KEY = "family_kassa_sales";
     const DEBTS_KEY = "family_kassa_debts";
+    const CLIENTS_KEY = "family_kassa_clients";
 
     function getProducts() {
       return JSON.parse(localStorage.getItem(PRODUCTS_KEY) || "[]");
@@ -283,6 +301,14 @@
       localStorage.setItem(DEBTS_KEY, JSON.stringify(debts));
     }
 
+    function getClients() {
+      return JSON.parse(localStorage.getItem(CLIENTS_KEY) || "[]");
+    }
+
+    function saveClients(clients) {
+      localStorage.setItem(CLIENTS_KEY, JSON.stringify(clients));
+    }
+
     function showSection(sectionId) {
       const el = document.getElementById(sectionId);
       if (el) {
@@ -292,6 +318,10 @@
 
     function formatMoney(value) {
       return Number(value || 0).toLocaleString("ru-RU");
+    }
+
+    function generateClientId() {
+      return Date.now();
     }
 
     function updateDashboard() {
@@ -314,6 +344,11 @@
       document.getElementById("product_qty").value = "";
       document.getElementById("product_buy_price").value = "";
       document.getElementById("product_sell_price").value = "";
+    }
+
+    function clearClientForm() {
+      document.getElementById("client_name").value = "";
+      document.getElementById("client_phone").value = "";
     }
 
     function addProduct() {
@@ -350,6 +385,34 @@
       renderProducts();
       fillSaleProducts();
       updateDashboard();
+    }
+
+    function addClient() {
+      const name = document.getElementById("client_name").value.trim();
+      const phone = document.getElementById("client_phone").value.trim();
+
+      if (!name) {
+        alert("Введите имя клиента");
+        return;
+      }
+
+      if (!phone) {
+        alert("Введите телефон клиента");
+        return;
+      }
+
+      const clients = getClients();
+      clients.push({
+        id: generateClientId(),
+        name,
+        phone
+      });
+      saveClients(clients);
+
+      clearClientForm();
+      renderClients();
+      fillSaleClients();
+      alert("Клиент сохранён");
     }
 
     function deleteProduct(index) {
@@ -405,10 +468,40 @@
       updateSalePreview();
     }
 
+    function fillSaleClients() {
+      const select = document.getElementById("sale_client_select");
+      const clients = getClients();
+
+      if (!select) return;
+
+      if (clients.length === 0) {
+        select.innerHTML = `<option value="">Нет клиентов</option>`;
+        fillSelectedClient();
+        return;
+      }
+
+      select.innerHTML = `<option value="">Выберите клиента</option>` + clients.map((client) => `
+        <option value="${client.id}">ID ${client.id} — ${client.name} — ${client.phone}</option>
+      `).join("");
+
+      fillSelectedClient();
+    }
+
+    function fillSelectedClient() {
+      const selectedId = document.getElementById("sale_client_select").value;
+      const clients = getClients();
+      const client = clients.find(c => String(c.id) === String(selectedId));
+
+      document.getElementById("sale_client_name").value = client ? client.name : "";
+      document.getElementById("sale_client_phone").value = client ? client.phone : "";
+    }
+
     function updateSalePreview() {
       const productIndex = document.getElementById("sale_product").value;
       const qty = Number(document.getElementById("sale_qty").value || 0);
       const paid = Number(document.getElementById("sale_paid").value || 0);
+      const clientName = document.getElementById("sale_client_name").value || "—";
+      const clientPhone = document.getElementById("sale_client_phone").value || "—";
 
       const preview = document.getElementById("sale_preview");
       const message = document.getElementById("sale_preview_message");
@@ -436,6 +529,8 @@
       document.getElementById("preview_price").textContent = formatMoney(price);
       document.getElementById("preview_stock").textContent = stock;
       document.getElementById("preview_qty").textContent = qty;
+      document.getElementById("preview_client").textContent = clientName;
+      document.getElementById("preview_phone").textContent = clientPhone;
       document.getElementById("preview_total").textContent = formatMoney(total);
       document.getElementById("preview_paid").textContent = formatMoney(paid);
       document.getElementById("preview_debt").textContent = formatMoney(debt);
@@ -444,6 +539,8 @@
         message.innerHTML = `<div class="warning">Ошибка: количество продажи больше остатка на складе.</div>`;
       } else if (paid > total) {
         message.innerHTML = `<div class="warning">Ошибка: клиент не может оплатить больше общей суммы продажи.</div>`;
+      } else if (!document.getElementById("sale_client_select").value) {
+        message.innerHTML = `<div class="warning">Ошибка: выберите клиента из списка.</div>`;
       } else {
         message.innerHTML = `<div class="ok">Проверка пройдена. Продажу можно сохранять.</div>`;
       }
@@ -454,13 +551,20 @@
     function addSale() {
       const productIndex = document.getElementById("sale_product").value;
       const qty = Number(document.getElementById("sale_qty").value);
-      const clientName = document.getElementById("sale_client").value.trim();
       const paid = Number(document.getElementById("sale_paid").value || 0);
+      const clientId = document.getElementById("sale_client_select").value;
+      const clientName = document.getElementById("sale_client_name").value.trim();
+      const clientPhone = document.getElementById("sale_client_phone").value.trim();
 
       const products = getProducts();
 
       if (productIndex === "") {
         alert("Выберите товар");
+        return;
+      }
+
+      if (!clientId) {
+        alert("Выберите клиента");
         return;
       }
 
@@ -473,11 +577,6 @@
 
       if (qty > Number(product.qty)) {
         alert("Ошибка: количество продажи больше остатка на складе");
-        return;
-      }
-
-      if (!clientName) {
-        alert("Введите имя клиента");
         return;
       }
 
@@ -495,9 +594,11 @@
 
       const sales = getSales();
       sales.push({
+        clientId,
+        clientName,
+        clientPhone,
         productName: product.name,
         qty,
-        clientName,
         paid,
         total,
         debt: debt > 0 ? debt : 0,
@@ -508,7 +609,9 @@
       if (debt > 0) {
         const debts = getDebts();
         debts.push({
+          clientId,
           clientName,
+          clientPhone,
           productName: product.name,
           amount: debt,
           date: new Date().toLocaleString("ru-RU")
@@ -518,12 +621,15 @@
 
       document.getElementById("sale_product").value = "";
       document.getElementById("sale_qty").value = "";
-      document.getElementById("sale_client").value = "";
+      document.getElementById("sale_client_select").value = "";
+      document.getElementById("sale_client_name").value = "";
+      document.getElementById("sale_client_phone").value = "";
       document.getElementById("sale_paid").value = "";
       document.getElementById("sale_preview").style.display = "none";
 
       renderProducts();
       fillSaleProducts();
+      fillSaleClients();
       renderSales();
       renderDebts();
       renderClients();
@@ -546,6 +652,8 @@
           <div class="product-name">${sale.productName}</div>
           <div class="product-meta">
             Клиент: ${sale.clientName}<br>
+            Телефон: ${sale.clientPhone}<br>
+            ID клиента: ${sale.clientId}<br>
             Количество: ${sale.qty}<br>
             Сумма: ${formatMoney(sale.total)}<br>
             Оплачено: ${formatMoney(sale.paid)}<br>
@@ -569,6 +677,8 @@
         <div class="product-item">
           <div class="product-name">${debt.clientName}</div>
           <div class="product-meta">
+            Телефон: ${debt.clientPhone}<br>
+            ID клиента: ${debt.clientId}<br>
             Товар: ${debt.productName}<br>
             Долг: ${formatMoney(debt.amount)}<br>
             Дата: ${debt.date}
@@ -581,52 +691,51 @@
       const list = document.getElementById("clients_list");
       const sales = getSales();
       const debts = getDebts();
+      const clients = getClients();
 
-      if (sales.length === 0) {
+      if (clients.length === 0) {
         list.innerHTML = `<div class="empty">Клиентов пока нет</div>`;
         return;
       }
 
       const clientsMap = {};
 
-      sales.forEach((sale) => {
-        const name = sale.clientName.trim().toLowerCase();
-        if (!clientsMap[name]) {
-          clientsMap[name] = {
-            displayName: sale.clientName,
-            purchases: 0,
-            totalBought: 0,
-            totalPaid: 0,
-            totalDebt: 0
-          };
-        }
+      clients.forEach((client) => {
+        clientsMap[String(client.id)] = {
+          id: client.id,
+          displayName: client.name,
+          phone: client.phone,
+          purchases: 0,
+          totalBought: 0,
+          totalPaid: 0,
+          totalDebt: 0
+        };
+      });
 
-        clientsMap[name].purchases += 1;
-        clientsMap[name].totalBought += Number(sale.total || 0);
-        clientsMap[name].totalPaid += Number(sale.paid || 0);
+      sales.forEach((sale) => {
+        const key = String(sale.clientId);
+        if (!clientsMap[key]) return;
+
+        clientsMap[key].purchases += 1;
+        clientsMap[key].totalBought += Number(sale.total || 0);
+        clientsMap[key].totalPaid += Number(sale.paid || 0);
       });
 
       debts.forEach((debt) => {
-        const name = debt.clientName.trim().toLowerCase();
-        if (!clientsMap[name]) {
-          clientsMap[name] = {
-            displayName: debt.clientName,
-            purchases: 0,
-            totalBought: 0,
-            totalPaid: 0,
-            totalDebt: 0
-          };
-        }
+        const key = String(debt.clientId);
+        if (!clientsMap[key]) return;
 
-        clientsMap[name].totalDebt += Number(debt.amount || 0);
+        clientsMap[key].totalDebt += Number(debt.amount || 0);
       });
 
-      const clients = Object.values(clientsMap).sort((a, b) => b.totalDebt - a.totalDebt);
+      const clientsArr = Object.values(clientsMap).sort((a, b) => b.totalDebt - a.totalDebt);
 
-      list.innerHTML = clients.map((client) => `
+      list.innerHTML = clientsArr.map((client) => `
         <div class="product-item">
           <div class="product-name">${client.displayName}</div>
           <div class="product-meta">
+            ID клиента: ${client.id}<br>
+            Телефон: ${client.phone}<br>
             Покупок: ${client.purchases}<br>
             Общая сумма покупок: ${formatMoney(client.totalBought)}<br>
             Всего оплачено: ${formatMoney(client.totalPaid)}<br>
@@ -638,6 +747,7 @@
 
     renderProducts();
     fillSaleProducts();
+    fillSaleClients();
     renderSales();
     renderDebts();
     renderClients();
