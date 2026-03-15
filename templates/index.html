@@ -134,6 +134,20 @@
       opacity: 0.7;
       padding: 10px 0;
     }
+
+    .warning {
+      margin-top: 8px;
+      color: #fca5a5;
+      font-size: 14px;
+      font-weight: bold;
+    }
+
+    .ok {
+      margin-top: 8px;
+      color: #86efac;
+      font-size: 14px;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
@@ -201,11 +215,13 @@
         <div class="product-name">Предварительный расчёт</div>
         <div class="product-meta">
           Цена товара: <span id="preview_price">0</span><br>
+          Остаток на складе: <span id="preview_stock">0</span><br>
           Количество: <span id="preview_qty">0</span><br>
           Общая сумма: <span id="preview_total">0</span><br>
           Оплачено: <span id="preview_paid">0</span><br>
           Остаток долга: <span id="preview_debt">0</span>
         </div>
+        <div id="sale_preview_message"></div>
       </div>
 
       <button class="btn" onclick="addSale()">Сохранить продажу</button>
@@ -395,6 +411,9 @@
       const paid = Number(document.getElementById("sale_paid").value || 0);
 
       const preview = document.getElementById("sale_preview");
+      const message = document.getElementById("sale_preview_message");
+
+      message.innerHTML = "";
 
       if (productIndex === "" || qty <= 0) {
         preview.style.display = "none";
@@ -409,15 +428,26 @@
         return;
       }
 
+      const stock = Number(product.qty || 0);
       const price = Number(product.sellPrice || 0);
       const total = price * qty;
-      const debt = Math.max(total - paid, 0);
+      const safePaid = paid > total ? total : paid;
+      const debt = Math.max(total - safePaid, 0);
 
       document.getElementById("preview_price").textContent = formatMoney(price);
+      document.getElementById("preview_stock").textContent = stock;
       document.getElementById("preview_qty").textContent = qty;
       document.getElementById("preview_total").textContent = formatMoney(total);
-      document.getElementById("preview_paid").textContent = formatMoney(paid);
+      document.getElementById("preview_paid").textContent = formatMoney(safePaid);
       document.getElementById("preview_debt").textContent = formatMoney(debt);
+
+      if (qty > stock) {
+        message.innerHTML = `<div class="warning">Ошибка: количество продажи больше остатка на складе.</div>`;
+      } else if (paid > total) {
+        message.innerHTML = `<div class="warning">Ошибка: клиент не может оплатить больше общей суммы продажи.</div>`;
+      } else {
+        message.innerHTML = `<div class="ok">Проверка пройдена. Продажу можно сохранять.</div>`;
+      }
 
       preview.style.display = "block";
     }
@@ -443,7 +473,7 @@
       }
 
       if (qty > Number(product.qty)) {
-        alert("На складе недостаточно товара");
+        alert("Ошибка: количество продажи больше остатка на складе");
         return;
       }
 
@@ -453,6 +483,12 @@
       }
 
       const total = qty * Number(product.sellPrice);
+
+      if (paid > total) {
+        alert("Ошибка: оплачено больше, чем общая сумма продажи");
+        return;
+      }
+
       const debt = total - paid;
 
       product.qty = Number(product.qty) - qty;
