@@ -229,14 +229,14 @@
       <div class="product-list" id="sales_list"></div>
     </div>
 
+    <div id="clients-section" class="section">
+      <h2>Клиенты</h2>
+      <div class="product-list" id="clients_list"></div>
+    </div>
+
     <div id="debts-section" class="section">
       <h2>Долги</h2>
       <div class="product-list" id="debts_list"></div>
-    </div>
-
-    <div id="clients-section" class="section">
-      <h2>Клиенты</h2>
-      <div class="empty">Раздел подключим следующим шагом</div>
     </div>
 
     <div id="stats-section" class="section">
@@ -431,14 +431,13 @@
       const stock = Number(product.qty || 0);
       const price = Number(product.sellPrice || 0);
       const total = price * qty;
-      const safePaid = paid > total ? total : paid;
-      const debt = Math.max(total - safePaid, 0);
+      const debt = Math.max(total - paid, 0);
 
       document.getElementById("preview_price").textContent = formatMoney(price);
       document.getElementById("preview_stock").textContent = stock;
       document.getElementById("preview_qty").textContent = qty;
       document.getElementById("preview_total").textContent = formatMoney(total);
-      document.getElementById("preview_paid").textContent = formatMoney(safePaid);
+      document.getElementById("preview_paid").textContent = formatMoney(paid);
       document.getElementById("preview_debt").textContent = formatMoney(debt);
 
       if (qty > stock) {
@@ -527,6 +526,7 @@
       fillSaleProducts();
       renderSales();
       renderDebts();
+      renderClients();
       updateDashboard();
 
       alert(`Продажа сохранена. Сумма: ${total}. Долг: ${debt > 0 ? debt : 0}`);
@@ -577,10 +577,70 @@
       `).join("");
     }
 
+    function renderClients() {
+      const list = document.getElementById("clients_list");
+      const sales = getSales();
+      const debts = getDebts();
+
+      if (sales.length === 0) {
+        list.innerHTML = `<div class="empty">Клиентов пока нет</div>`;
+        return;
+      }
+
+      const clientsMap = {};
+
+      sales.forEach((sale) => {
+        const name = sale.clientName.trim().toLowerCase();
+        if (!clientsMap[name]) {
+          clientsMap[name] = {
+            displayName: sale.clientName,
+            purchases: 0,
+            totalBought: 0,
+            totalPaid: 0,
+            totalDebt: 0
+          };
+        }
+
+        clientsMap[name].purchases += 1;
+        clientsMap[name].totalBought += Number(sale.total || 0);
+        clientsMap[name].totalPaid += Number(sale.paid || 0);
+      });
+
+      debts.forEach((debt) => {
+        const name = debt.clientName.trim().toLowerCase();
+        if (!clientsMap[name]) {
+          clientsMap[name] = {
+            displayName: debt.clientName,
+            purchases: 0,
+            totalBought: 0,
+            totalPaid: 0,
+            totalDebt: 0
+          };
+        }
+
+        clientsMap[name].totalDebt += Number(debt.amount || 0);
+      });
+
+      const clients = Object.values(clientsMap).sort((a, b) => b.totalDebt - a.totalDebt);
+
+      list.innerHTML = clients.map((client) => `
+        <div class="product-item">
+          <div class="product-name">${client.displayName}</div>
+          <div class="product-meta">
+            Покупок: ${client.purchases}<br>
+            Общая сумма покупок: ${formatMoney(client.totalBought)}<br>
+            Всего оплачено: ${formatMoney(client.totalPaid)}<br>
+            Общий долг: ${formatMoney(client.totalDebt)}
+          </div>
+        </div>
+      `).join("");
+    }
+
     renderProducts();
     fillSaleProducts();
     renderSales();
     renderDebts();
+    renderClients();
     updateDashboard();
   </script>
 </body>
