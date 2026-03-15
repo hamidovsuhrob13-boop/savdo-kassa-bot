@@ -121,11 +121,12 @@
       font-size: 18px;
       font-weight: bold;
       margin-bottom: 8px;
+      text-transform: uppercase;
     }
 
     .product-meta {
       font-size: 14px;
-      opacity: 0.9;
+      opacity: 0.95;
       line-height: 1.6;
     }
 
@@ -182,34 +183,35 @@
 
       <div class="product-list" id="product_list"></div>
     </div>
-<div id="sales-section" class="section">
-  <h2>Продажа</h2>
 
-  <div class="row">
-    <select id="sale_product" onchange="updateSalePreview()">
-      <option value="">Выберите товар</option>
-    </select>
+    <div id="sales-section" class="section">
+      <h2>Продажа</h2>
 
-    <input type="number" id="sale_qty" placeholder="Количество продажи" oninput="updateSalePreview()">
-    <input type="text" id="sale_client" placeholder="Имя клиента">
-    <input type="number" id="sale_paid" placeholder="Сколько оплатил клиент" oninput="updateSalePreview()">
-  </div>
+      <div class="row">
+        <select id="sale_product" onchange="updateSalePreview()">
+          <option value="">Выберите товар</option>
+        </select>
 
-  <div class="product-item" id="sale_preview" style="display:none;">
-    <div class="product-name">Предварительный расчёт</div>
-    <div class="product-meta">
-      Цена товара: <span id="preview_price">0</span><br>
-      Количество: <span id="preview_qty">0</span><br>
-      Общая сумма: <span id="preview_total">0</span><br>
-      Оплачено: <span id="preview_paid">0</span><br>
-      Остаток долга: <span id="preview_debt">0</span>
+        <input type="number" id="sale_qty" placeholder="Количество продажи" oninput="updateSalePreview()">
+        <input type="text" id="sale_client" placeholder="Имя клиента">
+        <input type="number" id="sale_paid" placeholder="Сколько оплатил клиент" oninput="updateSalePreview()">
+      </div>
+
+      <div class="product-item" id="sale_preview" style="display:none;">
+        <div class="product-name">Предварительный расчёт</div>
+        <div class="product-meta">
+          Цена товара: <span id="preview_price">0</span><br>
+          Количество: <span id="preview_qty">0</span><br>
+          Общая сумма: <span id="preview_total">0</span><br>
+          Оплачено: <span id="preview_paid">0</span><br>
+          Остаток долга: <span id="preview_debt">0</span>
+        </div>
+      </div>
+
+      <button class="btn" onclick="addSale()">Сохранить продажу</button>
+
+      <div class="product-list" id="sales_list"></div>
     </div>
-  </div>
-
-  <button class="btn" onclick="addSale()">Сохранить продажу</button>
-
-  <div class="product-list" id="sales_list"></div>
-</div>
 
     <div id="debts-section" class="section">
       <h2>Долги</h2>
@@ -376,12 +378,48 @@
 
       if (products.length === 0) {
         select.innerHTML = `<option value="">Нет товаров</option>`;
+        updateSalePreview();
         return;
       }
 
       select.innerHTML = `<option value="">Выберите товар</option>` + products.map((p, i) => `
         <option value="${i}">${p.name} | остаток: ${p.qty} | цена: ${p.sellPrice}</option>
       `).join("");
+
+      updateSalePreview();
+    }
+
+    function updateSalePreview() {
+      const productIndex = document.getElementById("sale_product").value;
+      const qty = Number(document.getElementById("sale_qty").value || 0);
+      const paid = Number(document.getElementById("sale_paid").value || 0);
+
+      const preview = document.getElementById("sale_preview");
+
+      if (productIndex === "" || qty <= 0) {
+        preview.style.display = "none";
+        return;
+      }
+
+      const products = getProducts();
+      const product = products[productIndex];
+
+      if (!product) {
+        preview.style.display = "none";
+        return;
+      }
+
+      const price = Number(product.sellPrice || 0);
+      const total = price * qty;
+      const debt = Math.max(total - paid, 0);
+
+      document.getElementById("preview_price").textContent = formatMoney(price);
+      document.getElementById("preview_qty").textContent = qty;
+      document.getElementById("preview_total").textContent = formatMoney(total);
+      document.getElementById("preview_paid").textContent = formatMoney(paid);
+      document.getElementById("preview_debt").textContent = formatMoney(debt);
+
+      preview.style.display = "block";
     }
 
     function addSale() {
@@ -447,6 +485,7 @@
       document.getElementById("sale_qty").value = "";
       document.getElementById("sale_client").value = "";
       document.getElementById("sale_paid").value = "";
+      document.getElementById("sale_preview").style.display = "none";
 
       renderProducts();
       fillSaleProducts();
