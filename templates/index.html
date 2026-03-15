@@ -182,23 +182,34 @@
 
       <div class="product-list" id="product_list"></div>
     </div>
+<div id="sales-section" class="section">
+  <h2>Продажа</h2>
 
-    <div id="sales-section" class="section">
-      <h2>Продажа</h2>
+  <div class="row">
+    <select id="sale_product" onchange="updateSalePreview()">
+      <option value="">Выберите товар</option>
+    </select>
 
-      <div class="row">
-        <select id="sale_product">
-          <option value="">Выберите товар</option>
-        </select>
-        <input type="number" id="sale_qty" placeholder="Количество продажи">
-        <input type="text" id="sale_client" placeholder="Имя клиента">
-        <input type="number" id="sale_paid" placeholder="Сколько оплатил клиент">
-      </div>
+    <input type="number" id="sale_qty" placeholder="Количество продажи" oninput="updateSalePreview()">
+    <input type="text" id="sale_client" placeholder="Имя клиента">
+    <input type="number" id="sale_paid" placeholder="Сколько оплатил клиент" oninput="updateSalePreview()">
+  </div>
 
-      <button class="btn" onclick="addSale()">Сохранить продажу</button>
-
-      <div class="product-list" id="sales_list"></div>
+  <div class="product-item" id="sale_preview" style="display:none;">
+    <div class="product-name">Предварительный расчёт</div>
+    <div class="product-meta">
+      Цена товара: <span id="preview_price">0</span><br>
+      Количество: <span id="preview_qty">0</span><br>
+      Общая сумма: <span id="preview_total">0</span><br>
+      Оплачено: <span id="preview_paid">0</span><br>
+      Остаток долга: <span id="preview_debt">0</span>
     </div>
+  </div>
+
+  <button class="btn" onclick="addSale()">Сохранить продажу</button>
+
+  <div class="product-list" id="sales_list"></div>
+</div>
 
     <div id="debts-section" class="section">
       <h2>Долги</h2>
